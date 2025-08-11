@@ -1,0 +1,30 @@
+# Node
+node_modules/
+dist/
+.angular/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Env
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Playwright
+playwright/.cache
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+

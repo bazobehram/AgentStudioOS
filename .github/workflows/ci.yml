@@ -1,0 +1,117 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install -r apps/control-api/requirements.txt
+          python -m pip install -r apps/runner/requirements.txt
+          pip install ruff
+          npm ci --prefix apps/dashboard
+          npm i -D eslint --prefix apps/dashboard
+      - name: Ruff (blocking)
+        run: ruff check apps/control-api apps/runner packages/sdk-py
+      - name: ESLint (blocking)
+        run: npx --prefix apps/dashboard eslint src
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test deps
+        run: |
+          python -m pip install -r apps/control-api/requirements.txt
+          python -m pip install -r apps/runner/requirements.txt
+          pip install pytest coverage
+      - name: Run unit tests with coverage (blocking)
+        run: |
+          coverage run -m pytest tests/unit -q
+          coverage xml
+          coverage report -m --fail-under=80
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: unit-coverage
+          path: coverage.xml
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Start Supabase services
+        run: |
+          docker compose -f infra/supabase/docker-compose.yml up -d
+          for i in {1..60}; do docker compose -f infra/supabase/docker-compose.yml exec -T db pg_isready -U postgres -h localhost && break || sleep 1; done
+          docker compose -f infra/supabase/docker-compose.yml exec -T db psql -U postgres -d postgres < infra/supabase/schema.sql
+          docker compose -f infra/supabase/docker-compose.yml exec -T db psql -U postgres -d postgres < infra/supabase/seed.sql
+      - name: Install deps
+        run: |
+          python -m pip install -r apps/control-api/requirements.txt
+          python -m pip install -r apps/runner/requirements.txt
+          pip install pytest coverage
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:54322/postgres
+        run: |
+          coverage run -m pytest tests/integration -q
+          coverage xml -i
+          coverage report -m --fail-under=80
+      - name: Teardown
+        if: always()
+        run: docker compose -f infra/supabase/docker-compose.yml down -v
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          npm ci --prefix apps/dashboard
+          npm i -D @playwright/test --prefix apps/dashboard
+          npx --prefix apps/dashboard playwright install --with-deps chromium
+          python -m pip install -r apps/control-api/requirements.txt
+          python -m pip install -r apps/runner/requirements.txt
+      - name: Start backend
+        run: |
+          python apps/control-api/main.py &
+          python apps/runner/main.py &
+          sleep 3
+      - name: Build and start dashboard
+        run: |
+          npx --prefix apps/dashboard ng build
+          npx --prefix apps/dashboard ng serve &
+          sleep 5
+      - name: Run Playwright tests
+        run: |
+          npx --prefix apps/dashboard playwright test apps/dashboard-e2e/tests --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-artifacts
+          path: apps/dashboard-e2e/test-results
+

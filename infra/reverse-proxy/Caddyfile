@@ -1,0 +1,18 @@
+{
+  email you@example.com
+}
+
+localhost {
+  encode gzip
+  route /api* {
+    uri strip_prefix /api
+    reverse_proxy 127.0.0.1:8001
+  }
+  route /ws* {
+    reverse_proxy 127.0.0.1:8001
+  }
+  route * {
+    reverse_proxy 127.0.0.1:4200
+  }
+}
+
