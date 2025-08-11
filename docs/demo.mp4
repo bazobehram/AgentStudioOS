@@ -1,0 +1,13 @@
+# AgentStudioOS Demo Video
+
+This is a placeholder for the demo video. 
+In a production environment, this would be a video file showing:
+
+1. Local demo startup with ./infra/local_demo.sh
+2. Dashboard opening at http://localhost:4200
+3. Creating and running agents
+4. Approval workflow demonstration
+5. Real-time logging and monitoring
+6. Plugin system showcase
+
+To create an actual demo video, record the application walkthrough and replace this placeholder.
